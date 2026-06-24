@@ -139,7 +139,7 @@ Resources:
     Properties:
       TopicArn: !Ref OrderNotificationsTopic
       Protocol: email
-      Endpoint: "your-actual-email@example.com"
+      Endpoint: "thakur34980@gmail.com"
 
   # 4. EventBridge Rule to route OrderProcessed events to SNS
   OrderProcessedRule:
