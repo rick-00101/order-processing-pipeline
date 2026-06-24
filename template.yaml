@@ -17,11 +17,11 @@ Resources:
       VisibilityTimeout: 30
 
   # 2. IAM Role allowing API Gateway to send messages to SQS
-  ApiGatewaySqsRole:
+ ApiGatewaySqsRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2010-09-09'
+        Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
@@ -30,12 +30,11 @@ Resources:
       Policies:
         - PolicyName: ApiSqsPublishPolicy
           PolicyDocument:
-            Version: '2010-09-09'
+            Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !GetAtt OrderProcessingQueue.Arn
-
   # 3. REST API Gateway with direct SQS FIFO Integration
   CheckoutApi:
     Type: AWS::Serverless::Api
