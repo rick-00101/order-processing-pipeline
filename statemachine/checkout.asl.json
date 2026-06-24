@@ -1,0 +1,32 @@
+{
+  "Comment": "Multi-branch checkout processing workflow",
+  "StartAt": "ProcessCheckoutParallel",
+  "States": {
+    "ProcessCheckoutParallel": {
+      "Type": "Parallel",
+      "End": true,
+      "Branches": [
+        {
+          "StartAt": "AuthorizePayment",
+          "States": {
+            "AuthorizePayment": {
+              "Type": "Task",
+              "Resource": "${PaymentFunctionArn}",
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "VerifyInventory",
+          "States": {
+            "VerifyInventory": {
+              "Type": "Task",
+              "Resource": "${InventoryFunctionArn}",
+              "End": true
+            }
+          }
+        }
+      ]
+    }
+  }
+}

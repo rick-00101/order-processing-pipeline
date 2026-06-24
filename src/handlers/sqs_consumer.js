@@ -1,24 +1,25 @@
-// Placeholder for Phase 2: SQS Consumer Lambda Handler
-// This will consume messages from the OrderProcessingQueue and process orders
+const { SFNClient, StartExecutionCommand } = require("@aws-sdk/client-sfn");
+const sfnClient = new SFNClient({});
 
 exports.handler = async (event) => {
-  console.log('SQS Event:', JSON.stringify(event, null, 2));
+    console.log("Received SQS Records:", event.Records.length);
 
-  // Phase 2: Process SQS messages
-  const records = event.Records || [];
+    for (const record of event.Records) {
+        const payload = JSON.parse(record.body);
 
-  for (const record of records) {
-    try {
-      const messageBody = JSON.parse(record.body);
-      console.log('Processing order:', messageBody);
-      // TODO: Implement order processing logic
-    } catch (error) {
-      console.error('Error processing message:', error);
+        const params = {
+            stateMachineArn: process.env.STATE_MACHINE_ARN,
+            input: JSON.stringify(payload),
+            name: `Order-${payload.orderId}-${Date.now()}` // Unique execution name
+        };
+
+        try {
+            const command = new StartExecutionCommand(params);
+            await sfnClient.send(command);
+            console.log(`Started Step Function execution for order ${payload.orderId}`);
+        } catch (error) {
+            console.error("Failed to start execution:", error);
+            throw error; // Throwing ensures SQS doesn't delete the message if this fails
+        }
     }
-  }
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ message: 'Messages processed' }),
-  };
 };

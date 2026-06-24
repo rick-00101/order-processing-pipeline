@@ -66,6 +66,58 @@ Resources:
                     responseTemplates:
                       application/json: '{"status": "Order queued successfully", "messageId": "$input.path(''SendMessageResponse/SendMessageResult/MessageId'')"}'
 
+  # --- PHASE 2 RESOURCES ---
+
+  # 1. Payment Lambda Function
+  PaymentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: payment.handler
+      Runtime: nodejs20.x
+
+  # 2. Inventory Lambda Function
+  InventoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: inventory.handler
+      Runtime: nodejs20.x
+
+  # 3. Step Functions State Machine
+  CheckoutStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      DefinitionUri: statemachine/checkout.asl.json
+      DefinitionSubstitutions:
+        PaymentFunctionArn: !GetAtt PaymentFunction.Arn
+        InventoryFunctionArn: !GetAtt InventoryFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref PaymentFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref InventoryFunction
+
+  # 4. SQS Consumer Lambda Function
+  SqsConsumerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: handlers/sqs_consumer.handler
+      Runtime: nodejs20.x
+      Environment:
+        Variables:
+          STATE_MACHINE_ARN: !Ref CheckoutStateMachine
+      Policies:
+        - StepFunctionsExecutionPolicy:
+            StateMachineName: !GetAtt CheckoutStateMachine.Name
+      Events:
+        MySQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt OrderProcessingQueue.Arn
+            BatchSize: 1
+
 Outputs:
   CheckoutApiUrl:
     Description: "API Gateway Endpoint URL for Checkout"
@@ -76,3 +128,6 @@ Outputs:
   QueueArn:
     Description: "SQS FIFO Queue ARN"
     Value: !GetAtt OrderProcessingQueue.Arn
+  StateMachineArn:
+    Description: "Step Functions State Machine ARN"
+    Value: !Ref CheckoutStateMachine
