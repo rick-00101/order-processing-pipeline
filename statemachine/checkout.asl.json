@@ -34,10 +34,10 @@
       "Parameters": {
         "Entries": [
           {
-            "EventBusName": "${EventBusName}",
-            "Source": "checkout.workflow",
+            "Detail.$": "States.JsonToString($)", 
             "DetailType": "OrderProcessed",
-            "Detail.$": "$"
+            "EventBusName": "${EventBusName}",
+            "Source": "checkout.workflow"
           }
         ]
       },
