@@ -17,7 +17,7 @@ Resources:
       VisibilityTimeout: 30
 
   # 2. IAM Role allowing API Gateway to send messages to SQS
- ApiGatewaySqsRole:
+  ApiGatewaySqsRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -35,6 +35,7 @@ Resources:
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !GetAtt OrderProcessingQueue.Arn
+
   # 3. REST API Gateway with direct SQS FIFO Integration
   CheckoutApi:
     Type: AWS::Serverless::Api
@@ -153,7 +154,7 @@ Resources:
     Properties:
       TopicArn: !Ref OrderNotificationsTopic
       Protocol: email
-      Endpoint: "your-actual-email@example.com"  # <--- यहाँ अपना असली ईमेल एड्रेस डालें!
+      Endpoint: "your-actual-email@example.com"
 
   # 11. EventBridge Rule to route OrderProcessed events to SNS
   EventBridgeToSNSRule:
