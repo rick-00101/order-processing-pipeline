@@ -51,7 +51,7 @@ Resources:
               produces:
                 - application/json
               responses:
-                200:
+                '200':
                   description: Order received successfully
               x-amazon-apigateway-integration:
                 credentials: !GetAtt ApiGatewaySqsRole.Arn
