@@ -4,7 +4,7 @@
   "States": {
     "ParallelProcessing": {
       "Type": "Parallel",
-      "Next": "PublishToEventBridge",
+      "Next": "WrapResults",
       "Branches": [
         {
           "StartAt": "ProcessPayment",
@@ -27,6 +27,13 @@
           }
         }
       ]
+    },
+    "WrapResults": {
+      "Type": "Pass",
+      "Parameters": {
+        "orderResults.$": "$"
+      },
+      "Next": "PublishToEventBridge"
     },
     "PublishToEventBridge": {
       "Type": "Task",
