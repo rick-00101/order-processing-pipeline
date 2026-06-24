@@ -92,11 +92,14 @@ Resources:
       DefinitionSubstitutions:
         PaymentFunctionArn: !GetAtt PaymentFunction.Arn
         InventoryFunctionArn: !GetAtt InventoryFunction.Arn
+        EventBusName: !Ref OrderEventBus
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref PaymentFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref InventoryFunction
+        - EventBridgePutEventsPolicy:
+            EventBusName: !Ref OrderEventBus
 
   # 4. SQS Consumer Lambda Function
   SqsConsumerFunction:
@@ -118,6 +121,62 @@ Resources:
             Queue: !GetAtt OrderProcessingQueue.Arn
             BatchSize: 1
 
+  # --- PHASE 3 RESOURCES ---
+
+  # 1. Custom Event Bus
+  OrderEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: OrderProcessingBus
+
+  # 2. SNS Topic for Notifications
+  OrderNotificationsTopic:
+    Type: AWS::SNS::Topic
+
+  # 3. SNS Email Subscription
+  OrderNotificationSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref OrderNotificationsTopic
+      Protocol: email
+      Endpoint: "your-actual-email@example.com"
+
+  # 4. EventBridge Rule to route OrderProcessed events to SNS
+  OrderProcessedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: !Ref OrderEventBus
+      EventPattern:
+        source:
+          - checkout.workflow
+        detail-type:
+          - OrderProcessed
+      State: ENABLED
+      Targets:
+        - Arn: !Ref OrderNotificationsTopic
+          RoleArn: !GetAtt EventBridgeToSnsRole.Arn
+          Id: OrderProcessedTarget
+
+  # 5. IAM Role for EventBridge to publish to SNS
+  EventBridgeToSnsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EventBridgePublishToSnsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref OrderNotificationsTopic
+
 Outputs:
   CheckoutApiUrl:
     Description: "API Gateway Endpoint URL for Checkout"
@@ -131,3 +190,9 @@ Outputs:
   StateMachineArn:
     Description: "Step Functions State Machine ARN"
     Value: !Ref CheckoutStateMachine
+  EventBusArn:
+    Description: "Custom Event Bus ARN"
+    Value: !GetAtt OrderEventBus.Arn
+  OrderNotificationsTopicArn:
+    Description: "SNS Topic ARN for Order Notifications"
+    Value: !Ref OrderNotificationsTopic

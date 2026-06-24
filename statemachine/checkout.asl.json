@@ -4,7 +4,7 @@
   "States": {
     "ProcessCheckoutParallel": {
       "Type": "Parallel",
-      "End": true,
+      "Next": "PublishToEventBridge",
       "Branches": [
         {
           "StartAt": "AuthorizePayment",
@@ -27,6 +27,21 @@
           }
         }
       ]
+    },
+    "PublishToEventBridge": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::events:putEvents",
+      "Parameters": {
+        "Entries": [
+          {
+            "EventBusName": "${EventBusName}",
+            "Source": "checkout.workflow",
+            "DetailType": "OrderProcessed",
+            "Detail.$": "$"
+          }
+        ]
+      },
+      "End": true
     }
   }
 }
