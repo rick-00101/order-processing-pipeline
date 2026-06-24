@@ -1,15 +1,15 @@
 {
-  "Comment": "Multi-branch checkout processing workflow",
-  "StartAt": "ProcessCheckoutParallel",
+  "Comment": "Order Processing Workflow",
+  "StartAt": "ParallelProcessing",
   "States": {
-    "ProcessCheckoutParallel": {
+    "ParallelProcessing": {
       "Type": "Parallel",
       "Next": "PublishToEventBridge",
       "Branches": [
         {
-          "StartAt": "AuthorizePayment",
+          "StartAt": "ProcessPayment",
           "States": {
-            "AuthorizePayment": {
+            "ProcessPayment": {
               "Type": "Task",
               "Resource": "${PaymentFunctionArn}",
               "End": true
@@ -17,9 +17,9 @@
           }
         },
         {
-          "StartAt": "VerifyInventory",
+          "StartAt": "ProcessInventory",
           "States": {
-            "VerifyInventory": {
+            "ProcessInventory": {
               "Type": "Task",
               "Resource": "${InventoryFunctionArn}",
               "End": true
@@ -34,7 +34,7 @@
       "Parameters": {
         "Entries": [
           {
-            "Detail.$": "States.JsonToString($)", 
+            "Detail.$": "States.JsonToString($)",
             "DetailType": "OrderProcessed",
             "EventBusName": "${EventBusName}",
             "Source": "checkout.workflow"
