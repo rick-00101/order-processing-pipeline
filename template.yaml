@@ -70,12 +70,11 @@ Resources:
                 responses:
                   default:
                     statusCode: '200'
-                    responseTemplates:
-                      # Dumps the raw XML error or success string from SQS directly to your terminal
+                  responseTemplates:
                       application/json: |-
                         {
-                          "status": "Diagnostic Mode",
-                          "raw_sqs_output": "$util.escapeJavaScript($input.body)"
+                          "status": "Order queued successfully",
+                          "messageId": "$input.path('$.SendMessageResponse.SendMessageResult.MessageId')"
                         }
 
   # ==========================================
