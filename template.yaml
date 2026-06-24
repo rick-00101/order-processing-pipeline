@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Phase 1 - Ingress API Gateway to SQS FIFO Infrastructure
+
+Resources:
+  # 1. SQS FIFO Queue
+  OrderProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: OrderProcessingQueue.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 30
+
+  # 2. IAM Role allowing API Gateway to send messages to SQS
+  ApiGatewaySqsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ApiSqsPublishPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt OrderProcessingQueue.Arn
+
+  # 3. REST API Gateway
+  CheckoutApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      DefinitionBody:
+        swagger: '2.0'
+        info:
+          title: Checkout Ingress API
+          version: '1.0'
+        paths:
+          /checkout:
+            post:
+              summary: Submit an order
+              consumes:
+                - application/json
+              produces:
+                - application/json
+              responses:
+                200:
+                  description: Order received successfully
+              x-amazon-apigateway-integration:
+                credentials: !GetAtt ApiGatewaySqsRole.Arn
+                httpMethod: POST
+                type: aws
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:sqs:path/${AWS::AccountId}/${OrderProcessingQueue.QueueName}'
+                requestTemplates:
+                  application/json: 'Action=SendMessage&MessageBody=$util.urlEncode($input.body)&MessageGroupId=OrderGroup'
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseTemplates:
+                      application/json: '{"status": "Order queued successfully", "messageId": "$input.path(''SendMessageResponse/SendMessageResult/MessageId'')"}'
+
+Outputs:
+  CheckoutApiUrl:
+    Description: "API Gateway Endpoint URL for Checkout"
+    Value: !Sub "https://${CheckoutApi}.execute-api.${AWS::Region}.amazonaws.com/prod/checkout"
+  QueueUrl:
+    Description: "SQS FIFO Queue URL"
+    Value: !Ref OrderProcessingQueue
+  QueueArn:
+    Description: "SQS FIFO Queue ARN"
+    Value: !GetAtt OrderProcessingQueue.Arn
