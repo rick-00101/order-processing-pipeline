@@ -7,7 +7,6 @@ Resources:
   # PHASE 1: INGRESS (API GATEWAY & SQS FIFO)
   # ==========================================
   
-  # 1. SQS FIFO Queue
   OrderProcessingQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -16,7 +15,6 @@ Resources:
       ContentBasedDeduplication: true
       VisibilityTimeout: 30
 
-  # 2. IAM Role allowing API Gateway to send messages to SQS
   ApiGatewaySqsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -36,11 +34,12 @@ Resources:
                 Action: sqs:SendMessage
                 Resource: !GetAtt OrderProcessingQueue.Arn
 
-  # 3. REST API Gateway with direct SQS FIFO Integration
   CheckoutApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
+      Variables:
+        ForceDeploy: '1'  # <--- FORCES THE API STAGE TO REDEPLOY
       DefinitionBody:
         swagger: '2.0'
         info:
@@ -56,7 +55,7 @@ Resources:
                 - application/json
               responses:
                 '200':
-                  description: Order received successfully
+                  description: Order response
               x-amazon-apigateway-integration:
                 credentials: !GetAtt ApiGatewaySqsRole.Arn
                 httpMethod: POST
@@ -65,23 +64,24 @@ Resources:
                 requestParameters:
                   integration.request.header.Content-Type: "'application/x-www-form-urlencoded'"
                 requestTemplates:
-                  application/json: |
-                    Action=SendMessage&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$input.path('$.orderId')
+                  # Use |- to strip all hidden newlines, and added the official Version parameter
+                  application/json: |-
+                    Action=SendMessage&Version=2012-11-05&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$input.path('$.orderId')
                 responses:
                   default:
                     statusCode: '200'
                     responseTemplates:
-                      application/json: |
+                      # Dumps the raw XML error or success string from SQS directly to your terminal
+                      application/json: |-
                         {
-                          "status": "Order queued successfully",
-                          "messageId": "$input.path('//MessageId')"
+                          "status": "Diagnostic Mode",
+                          "raw_sqs_output": "$util.escapeJavaScript($input.body)"
                         }
 
   # ==========================================
   # PHASE 2: COMPUTE & ORCHESTRATION (LAMBDAS & STEP FUNCTIONS)
   # ==========================================
 
-  # 4. Payment Lambda Function
   PaymentFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -89,7 +89,6 @@ Resources:
       Handler: payment.handler
       Runtime: nodejs20.x
 
-  # 5. Inventory Lambda Function
   InventoryFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -97,7 +96,6 @@ Resources:
       Handler: inventory.handler
       Runtime: nodejs20.x
 
-  # 6. Step Functions State Machine
   CheckoutStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -114,7 +112,6 @@ Resources:
         - EventBridgePutEventsPolicy:
             EventBusName: !Ref OrderEventBus
 
-  # 7. SQS Consumer Lambda Function (The Bridge)
   SqsConsumerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -140,17 +137,14 @@ Resources:
   # PHASE 3: EVENT BROKERAGE & NOTIFICATIONS (EVENTBRIDGE & SNS)
   # ==========================================
 
-  # 8. Custom Event Bus
   OrderEventBus:
     Type: AWS::Events::EventBus
     Properties:
       Name: OrderProcessingBus
 
-  # 9. SNS Topic for Email Notifications
   OrderNotificationsTopic:
     Type: AWS::SNS::Topic
 
-  # 10. SNS Email Subscription
   OrderNotificationSubscription:
     Type: AWS::SNS::Subscription
     Properties:
@@ -158,7 +152,6 @@ Resources:
       Protocol: email
       Endpoint: "your-actual-email@example.com"  # <--- UPDATE THIS EMAIL!
 
-  # 11. EventBridge Rule to route OrderProcessed events to SNS
   EventBridgeToSNSRule:
     Type: AWS::Events::Rule
     Properties:
@@ -172,7 +165,6 @@ Resources:
         - Arn: !Ref OrderNotificationsTopic
           Id: "SNSTarget"
 
-  # 12. Policy allowing EventBridge to publish to the SNS Topic
   EventBridgeToSNSPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
