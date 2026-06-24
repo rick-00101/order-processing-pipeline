@@ -38,6 +38,8 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
+      Variables:
+        DeploymentTrigger: '2'  # <--- THIS TRICKS AWS INTO REDEPLOYING THE LIVE URL
       DefinitionBody:
         swagger: '2.0'
         info:
@@ -146,7 +148,7 @@ Resources:
     Properties:
       TopicArn: !Ref OrderNotificationsTopic
       Protocol: email
-      Endpoint: "your-actual-email@example.com"  # <--- DON'T FORGET YOUR EMAIL!
+      Endpoint: "thakur34980@gmail.com"  # <--- DO NOT FORGET YOUR EMAIL
 
   EventBridgeToSNSRule:
     Type: AWS::Events::Rule
