@@ -1,8 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Phase 1 - Ingress API Gateway to SQS FIFO Infrastructure
+Description: Complete Event-Driven Order Processing Pipeline (Phases 1-4)
 
 Resources:
+  # ==========================================
+  # PHASE 1: INGRESS (API GATEWAY & SQS FIFO)
+  # ==========================================
+  
   # 1. SQS FIFO Queue
   OrderProcessingQueue:
     Type: AWS::SQS::Queue
@@ -17,7 +21,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: '2010-09-09'
         Statement:
           - Effect: Allow
             Principal:
@@ -26,13 +30,13 @@ Resources:
       Policies:
         - PolicyName: ApiSqsPublishPolicy
           PolicyDocument:
-            Version: '2012-10-17'
+            Version: '2010-09-09'
             Statement:
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !GetAtt OrderProcessingQueue.Arn
 
-  # 3. REST API Gateway
+  # 3. REST API Gateway with direct SQS FIFO Integration
   CheckoutApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -59,16 +63,23 @@ Resources:
                 type: aws
                 uri: !Sub 'arn:aws:apigateway:${AWS::Region}:sqs:path/${AWS::AccountId}/${OrderProcessingQueue.QueueName}'
                 requestTemplates:
-                  application/json: 'Action=SendMessage&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$input.path(''$.orderId'')'
+                  application/json: |
+                    Action=SendMessage&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$input.path('$.orderId')
                 responses:
                   default:
                     statusCode: '200'
                     responseTemplates:
-                      application/json: '{"status": "Order queued successfully", "messageId": "$input.path(''SendMessageResponse/SendMessageResult/MessageId'')"}'
+                      application/json: |
+                        {
+                          "status": "Order queued successfully",
+                          "messageId": "$input.path('//MessageId')"
+                        }
 
-  # --- PHASE 2 RESOURCES ---
+  # ==========================================
+  # PHASE 2: COMPUTE & ORCHESTRATION (LAMBDAS & STEP FUNCTIONS)
+  # ==========================================
 
-  # 1. Payment Lambda Function
+  # 4. Payment Lambda Function
   PaymentFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -76,7 +87,7 @@ Resources:
       Handler: payment.handler
       Runtime: nodejs20.x
 
-  # 2. Inventory Lambda Function
+  # 5. Inventory Lambda Function
   InventoryFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -84,7 +95,7 @@ Resources:
       Handler: inventory.handler
       Runtime: nodejs20.x
 
-  # 3. Step Functions State Machine
+  # 6. Step Functions State Machine
   CheckoutStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -101,12 +112,12 @@ Resources:
         - EventBridgePutEventsPolicy:
             EventBusName: !Ref OrderEventBus
 
-  # 4. SQS Consumer Lambda Function
+  # 7. SQS Consumer Lambda Function (The Bridge)
   SqsConsumerFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/
-      Handler: handlers/sqs_consumer.handler
+      Handler: sqs_consumer.handler
       Runtime: nodejs20.x
       Environment:
         Variables:
@@ -114,6 +125,8 @@ Resources:
       Policies:
         - StepFunctionsExecutionPolicy:
             StateMachineName: !GetAtt CheckoutStateMachine.Name
+        - SQSPollerPolicy:
+            QueueName: !GetAtt OrderProcessingQueue.QueueName
       Events:
         MySQSEvent:
           Type: SQS
@@ -121,61 +134,55 @@ Resources:
             Queue: !GetAtt OrderProcessingQueue.Arn
             BatchSize: 1
 
-  # --- PHASE 3 RESOURCES ---
+  # ==========================================
+  # PHASE 3: EVENT BROKERAGE & NOTIFICATIONS (EVENTBRIDGE & SNS)
+  # ==========================================
 
-  # 1. Custom Event Bus
+  # 8. Custom Event Bus
   OrderEventBus:
     Type: AWS::Events::EventBus
     Properties:
       Name: OrderProcessingBus
 
-  # 2. SNS Topic for Notifications
+  # 9. SNS Topic for Email Notifications
   OrderNotificationsTopic:
     Type: AWS::SNS::Topic
 
-  # 3. SNS Email Subscription
+  # 10. SNS Email Subscription
   OrderNotificationSubscription:
     Type: AWS::SNS::Subscription
     Properties:
       TopicArn: !Ref OrderNotificationsTopic
       Protocol: email
-      Endpoint: "thakur34980@gmail.com"
+      Endpoint: "your-actual-email@example.com"  # <--- यहाँ अपना असली ईमेल एड्रेस डालें!
 
-  # 4. EventBridge Rule to route OrderProcessed events to SNS
-  OrderProcessedRule:
+  # 11. EventBridge Rule to route OrderProcessed events to SNS
+  EventBridgeToSNSRule:
     Type: AWS::Events::Rule
     Properties:
       EventBusName: !Ref OrderEventBus
       EventPattern:
         source:
-          - checkout.workflow
+          - "checkout.workflow"
         detail-type:
-          - OrderProcessed
-      State: ENABLED
+          - "OrderProcessed"
       Targets:
         - Arn: !Ref OrderNotificationsTopic
-          RoleArn: !GetAtt EventBridgeToSnsRole.Arn
-          Id: OrderProcessedTarget
+          Id: "SNSTarget"
 
-  # 5. IAM Role for EventBridge to publish to SNS
-  EventBridgeToSnsRole:
-    Type: AWS::IAM::Role
+  # 12. Policy allowing EventBridge to publish to the SNS Topic
+  EventBridgeToSNSPolicy:
+    Type: AWS::SNS::TopicPolicy
     Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+      Topics:
+        - !Ref OrderNotificationsTopic
+      PolicyDocument:
         Statement:
           - Effect: Allow
             Principal:
               Service: events.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: EventBridgePublishToSnsPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: sns:Publish
-                Resource: !Ref OrderNotificationsTopic
+            Action: sns:Publish
+            Resource: !Ref OrderNotificationsTopic
 
 Outputs:
   CheckoutApiUrl:
@@ -184,15 +191,6 @@ Outputs:
   QueueUrl:
     Description: "SQS FIFO Queue URL"
     Value: !Ref OrderProcessingQueue
-  QueueArn:
-    Description: "SQS FIFO Queue ARN"
-    Value: !GetAtt OrderProcessingQueue.Arn
   StateMachineArn:
     Description: "Step Functions State Machine ARN"
     Value: !Ref CheckoutStateMachine
-  EventBusArn:
-    Description: "Custom Event Bus ARN"
-    Value: !GetAtt OrderEventBus.Arn
-  OrderNotificationsTopicArn:
-    Description: "SNS Topic ARN for Order Notifications"
-    Value: !Ref OrderNotificationsTopic
