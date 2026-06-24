@@ -38,8 +38,6 @@ Resources:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
-      Variables:
-        ForceDeploy: '1'  # <--- FORCES THE API STAGE TO REDEPLOY
       DefinitionBody:
         swagger: '2.0'
         info:
@@ -64,14 +62,13 @@ Resources:
                 requestParameters:
                   integration.request.header.Content-Type: "'application/x-www-form-urlencoded'"
                 requestTemplates:
-                  # Use |- to strip all hidden newlines, and added the official Version parameter
-                  application/json: |-
+                  application/json: |
                     Action=SendMessage&Version=2012-11-05&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$input.path('$.orderId')
                 responses:
                   default:
                     statusCode: '200'
-                  responseTemplates:
-                      application/json: |-
+                    responseTemplates:
+                      application/json: |
                         {
                           "status": "Order queued successfully",
                           "messageId": "$input.path('$.SendMessageResponse.SendMessageResult.MessageId')"
@@ -149,7 +146,7 @@ Resources:
     Properties:
       TopicArn: !Ref OrderNotificationsTopic
       Protocol: email
-      Endpoint: "your-actual-email@example.com"  # <--- UPDATE THIS EMAIL!
+      Endpoint: "your-actual-email@example.com"  # <--- DON'T FORGET YOUR EMAIL!
 
   EventBridgeToSNSRule:
     Type: AWS::Events::Rule
