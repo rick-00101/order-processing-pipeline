@@ -59,7 +59,7 @@ Resources:
                 type: aws
                 uri: !Sub 'arn:aws:apigateway:${AWS::Region}:sqs:path/${AWS::AccountId}/${OrderProcessingQueue.QueueName}'
                 requestTemplates:
-                  application/json: 'Action=SendMessage&MessageBody=$util.urlEncode($input.body)&MessageGroupId=OrderGroupDefault'
+                  application/json: 'Action=SendMessage&MessageBody=$util.urlEncode($input.body)&MessageGroupId=$input.path(''$.orderId'')'
                 responses:
                   default:
                     statusCode: '200'
